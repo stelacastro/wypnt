@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-base-950 text-white font-sans antialiased;
+    /* Respects the safe area Telegram reserves for its own chrome
+       (close button, header) on iOS. */
+    padding-top: env(safe-area-inset-top);
+  }
+
+  ::selection {
+    @apply bg-ton/40;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}

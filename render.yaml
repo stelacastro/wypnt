@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: ton-nft-hub-api
+    env: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: PORT
+        value: 8787
+      - key: TONAPI_KEY
+        sync: false
+      - key: GETGEMS_API_KEY
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false
