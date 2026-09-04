@@ -3,7 +3,7 @@ import { useTonAddress, useTonWallet } from "@tonconnect/ui-react";
 import { Tag } from "lucide-react";
 import WalletConnect from "../WalletConnect";
 import NFTGrid from "../NFTGrid";
-import { fetchAggregatedNfts, simulateListing } from "../../services/nftService";
+import { fetchOwnedNfts, simulateListing } from "../../services/nftService";
 import type { UnifiedNFT } from "../../types/nft";
 
 export default function WalletView() {
@@ -15,14 +15,12 @@ export default function WalletView() {
   const [priceInput, setPriceInput] = useState("");
 
   useEffect(() => {
-    if (!wallet) return;
+    if (!wallet || !address) return;
     setLoading(true);
-    // Em produção: `fetchAggregatedNfts({ owner: address })` — o backend
-    // filtraria por dono real usando o índice de cada provedor.
-    fetchAggregatedNfts()
-      .then((res) => setItems(res.items.slice(0, 2))) // mock: "meus" NFTs
+    fetchOwnedNfts(address)
+      .then(setItems)
       .finally(() => setLoading(false));
-  }, [wallet]);
+  }, [wallet, address]);
 
   async function confirmListing(nft: UnifiedNFT) {
     const price = Number(priceInput);

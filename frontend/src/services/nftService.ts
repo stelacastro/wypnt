@@ -16,80 +16,27 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8787
 const api = axios.create({ baseURL: API_BASE_URL, timeout: 8000 });
 
 // ---------------------------------------------------------------------------
-// Normalização — exemplo de como cada origem seria mapeada para UnifiedNFT.
-// Estas funções espelham o que roda no backend (services/providers/*.ts);
-// estão aqui também para deixar claro, no frontend, o contrato que se
-// espera de cada provedor caso a normalização precise ser feita client-side.
-// ---------------------------------------------------------------------------
-
-/** Formato (simplificado) de um item retornado pela API GraphQL da Getgems. */
-interface GetgemsRawNft {
-  address: string;
-  name: string;
-  index: number;
-  image: { baseUrl: string };
-  collection: { name: string; address: string; approvedByUsersCount: number };
-  sale?: { fullPrice: string }; // nanoTON, string para evitar overflow
-  owner: { address: string; name?: string };
-}
-
-function normalizeGetgems(raw: GetgemsRawNft): UnifiedNFT {
-  return {
-    id: `getgems:${raw.address}`,
-    name: raw.name,
-    index: `#${raw.index}`,
-    imageUrl: raw.image.baseUrl,
-    collection: {
-      name: raw.collection.name,
-      address: raw.collection.address,
-      verified: raw.collection.approvedByUsersCount > 0,
-    },
-    price: {
-      amount: raw.sale ? Number(BigInt(raw.sale.fullPrice)) / 1e9 : 0,
-      currency: "TON",
-    },
-    owner: { address: raw.owner.address, displayName: raw.owner.name },
-    source: "getgems",
-    isListed: Boolean(raw.sale),
-  };
-}
-
-/** Formato (simplificado) de um NFT retornado por tonapi.io (/v2/nfts/...). */
-interface TonApiRawNft {
-  address: string;
-  index: number;
-  metadata: { name: string; image?: string; attributes?: { trait_type: string; value: string }[] };
-  collection?: { name: string; address: string };
-  sale?: { price: { value: string; token_name: string } };
-  owner?: { address: string };
-}
-
-function normalizeTonApi(raw: TonApiRawNft): UnifiedNFT {
-  return {
-    id: `tonapi:${raw.address}`,
-    name: raw.metadata.name,
-    index: `#${raw.index}`,
-    imageUrl: raw.metadata.image ?? "",
-    collection: {
-      name: raw.collection?.name ?? "Unknown",
-      address: raw.collection?.address ?? "",
-      verified: false, // tonapi não expõe verificação diretamente; cruzar com allowlist própria
-    },
-    price: {
-      amount: raw.sale ? Number(raw.sale.price.value) / 1e9 : 0,
-      currency: "TON",
-    },
-    owner: { address: raw.owner?.address ?? "" },
-    source: "tonapi",
-    isListed: Boolean(raw.sale),
-    attributes: raw.metadata.attributes?.map((a) => ({ trait: a.trait_type, value: a.value })),
-  };
-}
-
-// ---------------------------------------------------------------------------
 // Mock data — usado enquanto USE_MOCK=true. Reflete o card visto no design
 // de referência ("Chill Flame", "Mini Oscar", collectible gifts).
+// A normalização "de verdade" (Getgems/TonAPI → UnifiedNFT) vive no backend,
+// em services/providers/*.ts — não duplicamos aqui para evitar drift de tipos.
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Link builders — espelham backend/src/services/links.ts. Mantidos aqui só
+// para os dados de mock; quando USE_MOCK=false, esses links já vêm prontos
+// do backend (calculados na normalização de cada provider).
+// ---------------------------------------------------------------------------
+
+function buildGetgemsUrl(collectionAddress: string, itemAddress: string): string {
+  return `https://getgems.io/collection/${collectionAddress}/${itemAddress}`;
+}
+
+function buildOfficialTelegramGiftUrl(name: string, index: string | number): string {
+  const slug = name.replace(/\s+/g, "");
+  const numericIndex = String(index).replace(/^#/, "");
+  return `https://t.me/nft/${slug}-${numericIndex}`;
+}
 
 const MOCK_NFTS: UnifiedNFT[] = [
   {
@@ -101,18 +48,25 @@ const MOCK_NFTS: UnifiedNFT[] = [
     price: { amount: 4.05, currency: "TON" },
     owner: { address: "UQAbc...123" },
     source: "getgems",
+    sourceUrl: buildGetgemsUrl("EQC...mock1", "EQC...item1"),
+    officialTelegramUrl: buildOfficialTelegramGiftUrl("Chill Flame", 374338),
     isListed: true,
   },
   {
-    id: "tonapi:mock-2",
+    id: "unknown:mock-2",
     name: "Mini Oscar",
     index: "#2912",
     imageUrl: "https://placehold.co/400x400/B8860B/FFFFFF?text=Mini+Oscar",
     collection: { name: "Mini Oscar", address: "EQC...mock2", verified: true },
-    price: { amount: 71.14, currency: "TON" },
+    price: { amount: 0, currency: "TON" },
     owner: { address: "UQDef...456" },
-    source: "tonapi",
-    isListed: true,
+    source: "unknown",
+    sourceUrl: buildGetgemsUrl("EQC...mock2", "EQC...item2"),
+    officialTelegramUrl: buildOfficialTelegramGiftUrl("Mini Oscar", 2912),
+    // Exemplo de item custodiado por uma plataforma que não conseguimos
+    // atribuir com confiança (ex.: MRKT/Portals) — sem contrato de venda
+    // on-chain, então não fingimos ter um preço.
+    isListed: false,
   },
   {
     id: "getgems:mock-3",
@@ -123,6 +77,8 @@ const MOCK_NFTS: UnifiedNFT[] = [
     price: { amount: 3.7, currency: "TON" },
     owner: { address: "UQGhi...789" },
     source: "getgems",
+    sourceUrl: buildGetgemsUrl("EQC...mock3", "EQC...item3"),
+    officialTelegramUrl: buildOfficialTelegramGiftUrl("Lucky Snake", 5581),
     isListed: true,
   },
   {
@@ -134,6 +90,8 @@ const MOCK_NFTS: UnifiedNFT[] = [
     price: { amount: 44.03, currency: "TON" },
     owner: { address: "UQJkl...012" },
     source: "fragment",
+    sourceUrl: buildGetgemsUrl("EQC...mock1", "EQC...item4"),
+    officialTelegramUrl: buildOfficialTelegramGiftUrl("Chill Flame", 80808),
     isListed: true,
   },
 ];
@@ -175,17 +133,13 @@ export async function fetchNftById(id: string): Promise<UnifiedNFT | null> {
   return data;
 }
 
-/**
- * Simula o envio de uma listagem/compra. Em uma implementação real, isto
- * dispara uma transação assinada pela carteira do usuário via TON Connect
- * (ex.: `tonConnectUI.sendTransaction({...})`) apontando para o contrato
- * NFTItem/Sale correspondente à origem (Getgems usa seu próprio contrato de
- * sale; um marketplace nativo TON usaria o padrão NftSale#Fixed price).
- * Aqui apenas resolvemos localmente para fins de demonstração de fluxo.
- */
-export async function simulatePurchase(nftId: string): Promise<{ ok: true; txHash: string }> {
-  await new Promise((r) => setTimeout(r, 900));
-  return { ok: true, txHash: `MOCK_TX_${nftId}_${Date.now()}` };
+/** NFTs que a carteira `ownerAddress` possui — alimenta a tela "Minha carteira". */
+export async function fetchOwnedNfts(ownerAddress: string): Promise<UnifiedNFT[]> {
+  if (USE_MOCK) return MOCK_NFTS.slice(0, 2);
+  const { data } = await api.get<FetchNftsResult>(
+    `/api/nfts/owner/${encodeURIComponent(ownerAddress)}`
+  );
+  return data.items;
 }
 
 export async function simulateListing(
@@ -196,4 +150,3 @@ export async function simulateListing(
   return { ok: true, nftId, priceTon };
 }
 
-export { normalizeGetgems, normalizeTonApi };

@@ -3,7 +3,7 @@
  * payload — o `nftService` é responsável por normalizar tudo para
  * `UnifiedNFT` antes de chegar nos componentes.
  */
-export type NftSource = "getgems" | "tonapi" | "fragment";
+export type NftSource = "getgems" | "fragment" | "unknown";
 
 export interface UnifiedNFT {
   /** ID interno estável, prefixado pela origem: ex. "getgems:123" */
@@ -26,6 +26,10 @@ export interface UnifiedNFT {
     displayName?: string;
   };
   source: NftSource;
+  /** Link de destino ao clicar "Ver oferta" — sempre abre no app oficial da origem. */
+  sourceUrl: string;
+  /** Link oficial t.me/nft/... — best-effort, ver backend/src/services/links.ts. */
+  officialTelegramUrl?: string;
   /** Se o item está atualmente listado à venda */
   isListed: boolean;
   attributes?: Array<{ trait: string; value: string }>;

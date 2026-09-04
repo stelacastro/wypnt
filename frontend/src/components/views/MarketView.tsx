@@ -1,19 +1,23 @@
 import { useEffect, useState } from "react";
-import { useTonWallet } from "@tonconnect/ui-react";
-import { X, Diamond, Loader2 } from "lucide-react";
-import { fetchAggregatedNfts, simulatePurchase } from "../../services/nftService";
+import WebApp from "@twa-dev/sdk";
+import { X, Diamond, ExternalLink, Send } from "lucide-react";
+import { fetchAggregatedNfts } from "../../services/nftService";
 import type { FetchNftsParams, UnifiedNFT } from "../../types/nft";
 import NFTGrid from "../NFTGrid";
 import FilterBar from "../FilterBar";
 import PlatformBadge from "../PlatformBadge";
 
+const PLATFORM_LABEL: Record<UnifiedNFT["source"], string> = {
+  getgems: "Getgems",
+  fragment: "Fragment",
+  unknown: "On-chain",
+};
+
 export default function MarketView() {
-  const wallet = useTonWallet();
   const [items, setItems] = useState<UnifiedNFT[]>([]);
   const [loading, setLoading] = useState(true);
   const [sort, setSort] = useState<NonNullable<FetchNftsParams["sort"]>>("recent");
   const [selected, setSelected] = useState<UnifiedNFT | null>(null);
-  const [purchaseState, setPurchaseState] = useState<"idle" | "pending" | "done">("idle");
 
   useEffect(() => {
     let cancelled = false;
@@ -28,23 +32,28 @@ export default function MarketView() {
     };
   }, [sort]);
 
-  async function handleBuy(nft: UnifiedNFT) {
-    if (!wallet) {
-      // Em produção: abrir o modal do TON Connect aqui em vez de apenas alertar.
-      return;
+  /**
+   * Em vez de simular uma compra dentro do nosso app, redirecionamos pro
+   * mini app/site oficial de onde o item está listado. `openLink` abre
+   * URLs https normais (ex. getgems.io) no navegador in-app do Telegram;
+   * links t.me (ex. o mini app da própria Getgems, @getgemsnftbot) devem
+   * usar `openTelegramLink` para abrir nativamente dentro do Telegram.
+   */
+  function handleOpenListing(nft: UnifiedNFT) {
+    if (nft.sourceUrl.startsWith("https://t.me/")) {
+      WebApp.openTelegramLink(nft.sourceUrl);
+    } else {
+      WebApp.openLink(nft.sourceUrl);
     }
-    setPurchaseState("pending");
-    // Fluxo real: montar o payload da mensagem para o contrato de venda
-    // (endereço do sale contract da origem `nft.source`) e chamar
-    // `tonConnectUI.sendTransaction({ messages: [...] })`. Aqui simulamos
-    // a confirmação para demonstrar o fluxo de UI.
-    await simulatePurchase(nft.id);
-    setPurchaseState("done");
+  }
+
+  function handleOpenOfficialPage(nft: UnifiedNFT) {
+    if (!nft.officialTelegramUrl) return;
+    WebApp.openTelegramLink(nft.officialTelegramUrl);
   }
 
   function closeModal() {
     setSelected(null);
-    setPurchaseState("idle");
   }
 
   return (
@@ -52,7 +61,7 @@ export default function MarketView() {
       <header className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-xl font-semibold text-white">Gifts Marketplace</h1>
-          <p className="text-xs text-white/40">Agregado de Getgems, Fragment e TON API</p>
+          <p className="text-xs text-white/40">Agregado de Getgems, MRKT, Portals e Fragment</p>
         </div>
       </header>
 
@@ -81,26 +90,68 @@ export default function MarketView() {
                 <p className="text-xs text-white/40">
                   {selected.index} · {selected.collection.name}
                 </p>
-                <div className="mt-2 flex items-center gap-1">
-                  <Diamond size={13} className="text-gift" />
-                  <span className="font-display text-lg font-bold text-gift">
-                    {selected.price.amount.toFixed(2)} TON
-                  </span>
-                </div>
+                {selected.isListed ? (
+                  <div className="mt-2 flex items-center gap-1">
+                    <Diamond size={13} className="text-gift" />
+                    <span className="font-display text-lg font-bold text-gift">
+                      {selected.price.amount.toFixed(2)} TON
+                    </span>
+                  </div>
+                ) : (
+                  <p className="mt-2 text-xs text-white/30">Sem preço confirmado on-chain</p>
+                )}
               </div>
             </div>
 
-            <button
-              type="button"
-              disabled={purchaseState === "pending"}
-              onClick={() => handleBuy(selected)}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-ton py-3 text-sm font-semibold text-white disabled:opacity-60"
-            >
-              {purchaseState === "pending" && <Loader2 size={16} className="animate-spin" />}
-              {purchaseState === "idle" && (wallet ? "Comprar agora" : "Conecte a carteira para comprar")}
-              {purchaseState === "pending" && "Confirmando transação..."}
-              {purchaseState === "done" && "Compra simulada com sucesso ✓"}
-            </button>
+            {/* Compra acontece na plataforma de origem, não aqui — o app
+                só agrega e direciona. Isso evita custodiar fundos/itens
+                e não depende de contrato de venda próprio.
+
+                Só mostramos "Ver oferta na X" quando a origem é
+                CONFIRMADA (hoje, só Getgems) — para itens genéricos
+                "On-chain" (o que inclui qualquer item custodiado por
+                MRKT/Portals/Tonnel), não fingimos saber onde comprar:
+                mandamos só pro link oficial universal do Telegram. */}
+            {selected.source === "getgems" ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleOpenListing(selected)}
+                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-ton py-3 text-sm font-semibold text-white"
+                >
+                  <ExternalLink size={16} />
+                  Ver oferta na {PLATFORM_LABEL[selected.source]}
+                </button>
+
+                {selected.officialTelegramUrl && (
+                  <button
+                    type="button"
+                    onClick={() => handleOpenOfficialPage(selected)}
+                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-base-800 py-2.5 text-xs font-medium text-white/60 ring-1 ring-white/10"
+                  >
+                    <Send size={13} />
+                    Ver página oficial no Telegram
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="mt-3 text-xs text-white/40">
+                  Não conseguimos confirmar em qual marketplace este item está listado agora.
+                  A página oficial do Telegram mostra o dono atual e os atributos.
+                </p>
+                {selected.officialTelegramUrl && (
+                  <button
+                    type="button"
+                    onClick={() => handleOpenOfficialPage(selected)}
+                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-ton py-3 text-sm font-semibold text-white"
+                  >
+                    <Send size={16} />
+                    Ver página oficial no Telegram
+                  </button>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}

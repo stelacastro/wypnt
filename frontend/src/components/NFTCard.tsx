@@ -40,15 +40,16 @@ export default function NFTCard({ nft, onSelect }: NFTCardProps) {
         </div>
 
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1 rounded-lg bg-base-700 px-2 py-1">
-            <Diamond size={12} className="text-gift" />
-            <span className="font-display text-sm font-semibold text-gift">
-              {nft.price.amount.toFixed(2)}
-            </span>
-          </div>
-          {!nft.isListed && (
+          {nft.isListed ? (
+            <div className="flex items-center gap-1 rounded-lg bg-base-700 px-2 py-1">
+              <Diamond size={12} className="text-gift" />
+              <span className="font-display text-sm font-semibold text-gift">
+                {nft.price.amount.toFixed(2)}
+              </span>
+            </div>
+          ) : (
             <span className="text-[10px] font-medium uppercase tracking-wide text-white/30">
-              Não listado
+              Sem preço on-chain
             </span>
           )}
         </div>
