@@ -40,6 +40,11 @@ export interface FetchNftsParams {
   cursor?: string;
   limit?: number;
   sort?: "price_asc" | "price_desc" | "recent";
+  search?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  /** Ex.: { Model: ["Pumpkin"], Backdrop: ["Onyx Black"] } */
+  attributes?: Record<string, string[]>;
 }
 
 export interface FetchNftsResult {

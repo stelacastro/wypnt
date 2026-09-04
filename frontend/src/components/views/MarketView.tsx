@@ -1,10 +1,13 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import WebApp from "@twa-dev/sdk";
-import { X, Diamond, ExternalLink, Send } from "lucide-react";
+import { X, Diamond, ExternalLink, Send, RefreshCw } from "lucide-react";
 import { fetchAggregatedNfts } from "../../services/nftService";
-import type { FetchNftsParams, UnifiedNFT } from "../../types/nft";
+import type { UnifiedNFT } from "../../types/nft";
+import { EMPTY_FILTERS, countActiveFilters, type ActiveFilters } from "../../types/filters";
 import NFTGrid from "../NFTGrid";
-import FilterBar from "../FilterBar";
+import SearchBar from "../SearchBar";
+import FilterChips from "../FilterChips";
+import FilterSheet from "../FilterSheet";
 import PlatformBadge from "../PlatformBadge";
 
 const PLATFORM_LABEL: Record<UnifiedNFT["source"], string> = {
@@ -13,32 +16,63 @@ const PLATFORM_LABEL: Record<UnifiedNFT["source"], string> = {
   unknown: "On-chain",
 };
 
+// Não existe WebSocket/SSE público estável por coleção nas plataformas que
+// agregamos (ver comentário em backend/src/routes/nfts.ts) — "tempo real"
+// aqui é poll periódico. 20s é um equilíbrio entre atualidade percebida e
+// não martelar as APIs de origem a cada usuário aberto no app.
+const POLL_INTERVAL_MS = 20_000;
+
 export default function MarketView() {
   const [items, setItems] = useState<UnifiedNFT[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sort, setSort] = useState<NonNullable<FetchNftsParams["sort"]>>("recent");
+  const [filters, setFilters] = useState<ActiveFilters>(EMPTY_FILTERS);
+  const [searchDraft, setSearchDraft] = useState("");
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [selected, setSelected] = useState<UnifiedNFT | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const load = useCallback(async () => {
+    const res = await fetchAggregatedNfts({
+      sort: filters.sort,
+      search: filters.search || undefined,
+      minPrice: filters.minPrice,
+      maxPrice: filters.maxPrice,
+      attributes: Object.keys(filters.attributes).length > 0 ? filters.attributes : undefined,
+    });
+    setItems(res.items);
+    setLastUpdated(new Date());
+  }, [filters]);
+
+  // Debounce da busca — evita 1 request por tecla digitada.
+  useEffect(() => {
+    const t = setTimeout(() => setFilters((f) => ({ ...f, search: searchDraft })), 400);
+    return () => clearTimeout(t);
+  }, [searchDraft]);
+
+  // Busca inicial + toda vez que os filtros mudam.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetchAggregatedNfts({ sort })
-      .then((res) => {
-        if (!cancelled) setItems(res.items);
-      })
-      .finally(() => !cancelled && setLoading(false));
+    load().finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [sort]);
+  }, [load]);
 
-  /**
-   * Em vez de simular uma compra dentro do nosso app, redirecionamos pro
-   * mini app/site oficial de onde o item está listado. `openLink` abre
-   * URLs https normais (ex. getgems.io) no navegador in-app do Telegram;
-   * links t.me (ex. o mini app da própria Getgems, @getgemsnftbot) devem
-   * usar `openTelegramLink` para abrir nativamente dentro do Telegram.
-   */
+  // Poll em segundo plano — não mostra o skeleton de loading (só refresca
+  // os dados por trás), e é pausado enquanto o modal de detalhe está
+  // aberto pra não trocar o card debaixo do dedo do usuário.
+  useEffect(() => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(() => {
+      if (!selected) load();
+    }, POLL_INTERVAL_MS);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [load, selected]);
+
   function handleOpenListing(nft: UnifiedNFT) {
     if (nft.sourceUrl.startsWith("https://t.me/")) {
       WebApp.openTelegramLink(nft.sourceUrl);
@@ -56,18 +90,40 @@ export default function MarketView() {
     setSelected(null);
   }
 
+  const secondsAgo = lastUpdated ? Math.round((Date.now() - lastUpdated.getTime()) / 1000) : null;
+
   return (
-    <div className="flex flex-col gap-4 px-4 pb-4 pt-3">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-xl font-semibold text-white">Gifts Marketplace</h1>
-          <p className="text-xs text-white/40">Agregado de Getgems, MRKT, Portals e Fragment</p>
+    <div className="flex flex-col gap-3 px-4 pb-4 pt-3">
+      <header>
+        <h1 className="font-display text-xl font-semibold text-white">Gifts Marketplace</h1>
+        <div className="flex items-center gap-1.5 text-xs text-white/40">
+          <span>Agregado de Getgems e coleções on-chain</span>
+          {secondsAgo !== null && (
+            <span className="flex items-center gap-1 text-white/25">
+              <RefreshCw size={10} /> {secondsAgo}s
+            </span>
+          )}
         </div>
       </header>
 
-      <FilterBar sort={sort} onSortChange={setSort} />
+      <SearchBar
+        value={searchDraft}
+        onChange={setSearchDraft}
+        onOpenFilters={() => setFilterSheetOpen(true)}
+        activeFilterCount={countActiveFilters(filters)}
+      />
+
+      <FilterChips filters={filters} onChange={setFilters} />
 
       <NFTGrid items={items} loading={loading} onSelect={setSelected} />
+
+      <FilterSheet
+        open={filterSheetOpen}
+        onClose={() => setFilterSheetOpen(false)}
+        filters={filters}
+        onApply={setFilters}
+        items={items}
+      />
 
       {selected && (
         <div className="fixed inset-0 z-30 flex items-end bg-black/60 backdrop-blur-sm">
@@ -90,6 +146,20 @@ export default function MarketView() {
                 <p className="text-xs text-white/40">
                   {selected.index} · {selected.collection.name}
                 </p>
+
+                {selected.attributes && selected.attributes.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {selected.attributes.map((attr) => (
+                      <span
+                        key={attr.trait}
+                        className="rounded-md bg-white/5 px-1.5 py-0.5 text-[10px] text-white/50"
+                      >
+                        {attr.trait}: {attr.value}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
                 {selected.isListed ? (
                   <div className="mt-2 flex items-center gap-1">
                     <Diamond size={13} className="text-gift" />
@@ -104,14 +174,9 @@ export default function MarketView() {
             </div>
 
             {/* Compra acontece na plataforma de origem, não aqui — o app
-                só agrega e direciona. Isso evita custodiar fundos/itens
-                e não depende de contrato de venda próprio.
-
-                Só mostramos "Ver oferta na X" quando a origem é
-                CONFIRMADA (hoje, só Getgems) — para itens genéricos
-                "On-chain" (o que inclui qualquer item custodiado por
-                MRKT/Portals/Tonnel), não fingimos saber onde comprar:
-                mandamos só pro link oficial universal do Telegram. */}
+                só agrega e direciona. Só mostramos "Ver oferta na X"
+                quando a origem é CONFIRMADA (hoje, só Getgems); itens
+                genéricos "On-chain" vão só pro link oficial universal. */}
             {selected.source === "getgems" ? (
               <>
                 <button

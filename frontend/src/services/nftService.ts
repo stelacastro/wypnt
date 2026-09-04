@@ -51,6 +51,11 @@ const MOCK_NFTS: UnifiedNFT[] = [
     sourceUrl: buildGetgemsUrl("EQC...mock1", "EQC...item1"),
     officialTelegramUrl: buildOfficialTelegramGiftUrl("Chill Flame", 374338),
     isListed: true,
+    attributes: [
+      { trait: "Model", value: "Pumpkin" },
+      { trait: "Backdrop", value: "Onyx Black" },
+      { trait: "Symbol", value: "Illuminati" },
+    ],
   },
   {
     id: "unknown:mock-2",
@@ -67,6 +72,10 @@ const MOCK_NFTS: UnifiedNFT[] = [
     // atribuir com confiança (ex.: MRKT/Portals) — sem contrato de venda
     // on-chain, então não fingimos ter um preço.
     isListed: false,
+    attributes: [
+      { trait: "Model", value: "Golden" },
+      { trait: "Backdrop", value: "Ruby Red" },
+    ],
   },
   {
     id: "getgems:mock-3",
@@ -80,6 +89,10 @@ const MOCK_NFTS: UnifiedNFT[] = [
     sourceUrl: buildGetgemsUrl("EQC...mock3", "EQC...item3"),
     officialTelegramUrl: buildOfficialTelegramGiftUrl("Lucky Snake", 5581),
     isListed: true,
+    attributes: [
+      { trait: "Model", value: "Emerald" },
+      { trait: "Symbol", value: "Fortune" },
+    ],
   },
   {
     id: "fragment:mock-4",
@@ -105,10 +118,35 @@ async function fetchMock(params: FetchNftsParams): Promise<FetchNftsResult> {
       n.collection.name.toLowerCase().includes(params.collection!.toLowerCase())
     );
   }
+  if (params.search) {
+    const q = params.search.trim().toLowerCase();
+    items = items.filter(
+      (n) => n.name.toLowerCase().includes(q) || n.index.toLowerCase().includes(q.replace(/^#/, ""))
+    );
+  }
+  if (params.minPrice !== undefined) items = items.filter((n) => n.price.amount >= params.minPrice!);
+  if (params.maxPrice !== undefined) items = items.filter((n) => n.price.amount <= params.maxPrice!);
+  if (params.attributes) {
+    const pairs = Object.entries(params.attributes).flatMap(([trait, values]) =>
+      values.map((value) => ({ trait, value }))
+    );
+    items = items.filter((n) =>
+      pairs.every((p) => n.attributes?.some((a) => a.trait === p.trait && a.value === p.value))
+    );
+  }
   if (params.sort === "price_asc") items.sort((a, b) => a.price.amount - b.price.amount);
   if (params.sort === "price_desc") items.sort((a, b) => b.price.amount - a.price.amount);
 
   return { items, nextCursor: undefined };
+}
+
+/** { Model: ["Pumpkin"], Backdrop: ["Onyx Black"] } → "Model:Pumpkin,Backdrop:Onyx Black" */
+function serializeAttributes(attributes?: Record<string, string[]>): string | undefined {
+  if (!attributes) return undefined;
+  const pairs = Object.entries(attributes).flatMap(([trait, values]) =>
+    values.map((value) => `${trait}:${value}`)
+  );
+  return pairs.length > 0 ? pairs.join(",") : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -123,7 +161,9 @@ export async function fetchAggregatedNfts(
   // Backend já retorna itens no formato UnifiedNFT (ver backend/src/routes/nfts.ts),
   // então aqui não é necessário reaplicar normalizeGetgems/normalizeTonApi —
   // essas funções documentam o mapeamento que o backend replica.
-  const { data } = await api.get<FetchNftsResult>("/api/nfts", { params });
+  const { data } = await api.get<FetchNftsResult>("/api/nfts", {
+    params: { ...params, attributes: serializeAttributes(params.attributes) },
+  });
   return data;
 }
 
