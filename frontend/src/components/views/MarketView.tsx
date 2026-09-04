@@ -3,11 +3,14 @@ import WebApp from "@twa-dev/sdk";
 import { X, Diamond, ExternalLink, Send, RefreshCw } from "lucide-react";
 import { fetchAggregatedNfts } from "../../services/nftService";
 import type { UnifiedNFT } from "../../types/nft";
+import type { UnifiedCollection } from "../../types/collection";
 import { EMPTY_FILTERS, countActiveFilters, type ActiveFilters } from "../../types/filters";
 import NFTGrid from "../NFTGrid";
 import SearchBar from "../SearchBar";
+import FilterBar from "../FilterBar";
 import FilterChips from "../FilterChips";
 import FilterSheet from "../FilterSheet";
+import CollectionsModal from "../CollectionsModal";
 import PlatformBadge from "../PlatformBadge";
 
 const PLATFORM_LABEL: Record<UnifiedNFT["source"], string> = {
@@ -28,12 +31,14 @@ export default function MarketView() {
   const [filters, setFilters] = useState<ActiveFilters>(EMPTY_FILTERS);
   const [searchDraft, setSearchDraft] = useState("");
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+  const [collectionsModalOpen, setCollectionsModalOpen] = useState(false);
   const [selected, setSelected] = useState<UnifiedNFT | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetchAggregatedNfts({
+      collection: filters.collection,
       sort: filters.sort,
       search: filters.search || undefined,
       minPrice: filters.minPrice,
@@ -90,6 +95,17 @@ export default function MarketView() {
     setSelected(null);
   }
 
+  function handleSelectCollection(collection: UnifiedCollection | null) {
+    setFilters((f) => ({
+      ...f,
+      collection: collection?.address,
+      collectionName: collection?.name,
+      // Traits (Model/Backdrop/Symbol/...) são por-coleção — trocar ou
+      // limpar a coleção invalida qualquer seleção de atributo anterior.
+      attributes: {},
+    }));
+  }
+
   const secondsAgo = lastUpdated ? Math.round((Date.now() - lastUpdated.getTime()) / 1000) : null;
 
   return (
@@ -106,10 +122,13 @@ export default function MarketView() {
         </div>
       </header>
 
-      <SearchBar
-        value={searchDraft}
-        onChange={setSearchDraft}
-        onOpenFilters={() => setFilterSheetOpen(true)}
+      <SearchBar value={searchDraft} onChange={setSearchDraft} />
+
+      <FilterBar
+        filters={filters}
+        onChange={setFilters}
+        onOpenFilterSheet={() => setFilterSheetOpen(true)}
+        onOpenCollections={() => setCollectionsModalOpen(true)}
         activeFilterCount={countActiveFilters(filters)}
       />
 
@@ -122,7 +141,13 @@ export default function MarketView() {
         onClose={() => setFilterSheetOpen(false)}
         filters={filters}
         onApply={setFilters}
-        items={items}
+      />
+
+      <CollectionsModal
+        open={collectionsModalOpen}
+        onClose={() => setCollectionsModalOpen(false)}
+        selectedAddress={filters.collection}
+        onSelect={handleSelectCollection}
       />
 
       {selected && (

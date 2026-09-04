@@ -15,6 +15,21 @@ interface FilterChipsProps {
 export default function FilterChips({ filters, onChange }: FilterChipsProps) {
   const chips: Chip[] = [];
 
+  if (filters.collection) {
+    chips.push({
+      key: "collection",
+      label: filters.collectionName ?? "Coleção selecionada",
+      onRemove: () =>
+        onChange({
+          ...filters,
+          collection: undefined,
+          collectionName: undefined,
+          // Traits são por-coleção — sem coleção selecionada eles não fazem
+          // mais sentido, então limpamos junto pra não deixar filtro órfão.
+          attributes: {},
+        }),
+    });
+  }
   if (filters.minPrice !== undefined) {
     chips.push({
       key: "minPrice",

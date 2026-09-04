@@ -1,5 +1,6 @@
 import axios from "axios";
 import type { UnifiedNFT, FetchNftsQuery } from "../../types.js";
+import { buildGetgemsUrl, buildOfficialTelegramGiftUrl } from "../links.js";
 
 /**
  * Adapter para a Getgems (maior marketplace de NFTs em TON).
@@ -79,6 +80,8 @@ function normalize(raw: GetgemsNftItem): UnifiedNFT {
     },
     owner: { address: raw.owner.address, displayName: raw.owner.name },
     source: "getgems",
+    sourceUrl: buildGetgemsUrl(raw.collection.address, raw.address),
+    officialTelegramUrl: buildOfficialTelegramGiftUrl(raw.name, raw.index),
     isListed: Boolean(raw.sale),
   };
 }

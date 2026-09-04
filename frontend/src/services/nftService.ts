@@ -114,8 +114,12 @@ async function fetchMock(params: FetchNftsParams): Promise<FetchNftsResult> {
   let items = [...MOCK_NFTS];
 
   if (params.collection) {
-    items = items.filter((n) =>
-      n.collection.name.toLowerCase().includes(params.collection!.toLowerCase())
+    // O filtro real usa o endereço da coleção (vindo do modal de coleções),
+    // mas aceitamos também um match por nome pra facilitar testes manuais
+    // do mock digitando o nome direto.
+    const c = params.collection.toLowerCase();
+    items = items.filter(
+      (n) => n.collection.address.toLowerCase() === c || n.collection.name.toLowerCase().includes(c)
     );
   }
   if (params.search) {

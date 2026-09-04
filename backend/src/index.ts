@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { nftsRouter } from "./routes/nfts.js";
+import { collectionsRouter } from "./routes/collections.js";
 
 const app = express();
 const PORT = process.env.PORT ?? 8787;
@@ -14,6 +15,7 @@ app.use(express.json());
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 app.use("/api/nfts", nftsRouter);
+app.use("/api/collections", collectionsRouter);
 
 app.listen(PORT, () => {
   console.log(`TON NFT Hub backend rodando em http://localhost:${PORT}`);
