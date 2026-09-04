@@ -16,7 +16,7 @@ import "./index.css";
  * Precisa estar em HTTPS e acessível publicamente — carteiras como
  * Tonkeeper buscam esse manifesto para validar a origem da conexão.
  */
-const MANIFEST_URL = `${window.location.origin}${import.meta.env.BASE_URL}tonconnect-manifest.json`;
+const MANIFEST_URL = `${window.location.origin}/tonconnect-manifest.json`;
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

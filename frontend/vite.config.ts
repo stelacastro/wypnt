@@ -6,7 +6,7 @@ import react from "@vitejs/plugin-react";
 // keeps built asset URLs relative so it works from any host.
 export default defineConfig({
   plugins: [react()],
-  base: "./",
+  base: "",
   server: {
     host: true, // allow LAN/tunnel access for testing inside Telegram
     port: 5173,
